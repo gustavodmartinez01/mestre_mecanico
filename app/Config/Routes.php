@@ -185,7 +185,11 @@ $routes->group('compras', ['filter' => 'auth'], function($routes) {
     $routes->get('buscar_itens_ajax/', 'ComprasController::buscar_itens_ajax');
 
     $routes->get('imprimir/(:num)', 'ComprasController::imprimir/$1');
+    $routes->get('whatsapp/(:num)', 'ComprasController::whatsapp/$1');
 });
 
 
 }); // FIM DO GRUPO AUTH (Corrigido: adicionado o parêntese final)
+$routes->get('view/requisicao/(:any)', 'ComprasController::visualizar_publico/$1');
+
+

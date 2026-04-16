@@ -14,7 +14,9 @@
             <a href="<?= base_url('compras') ?>" class="btn btn-default border shadow-sm">
                 <i class="fas fa-arrow-left mr-1"></i> Voltar
             </a>
-            
+            <a href="<?= base_url('compras/whatsapp/'.$requisicao['id']) ?>" target="_blank" class="btn btn-success shadow-sm">
+    <i class="fab fa-whatsapp mr-1"></i> Enviar ao Fornecedor
+</a>
             <a href="<?= base_url('compras/imprimir/'.$requisicao['id']) ?>" target="_blank" class="btn btn-info shadow-sm">
                 <i class="fas fa-print mr-1"></i> Gerar PDF
             </a>

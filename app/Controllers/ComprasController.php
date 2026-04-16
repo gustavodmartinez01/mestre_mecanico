@@ -324,7 +324,7 @@ public function imprimir($id)
 {
     // 1. Busca a requisição
     $requisicao = $this->reqModel
-        ->select('compras_requisicoes.*, fornecedores.nome as nome_fornecedor')
+        ->select('compras_requisicoes.*, fornecedores.nome_razao as nome_fornecedor')
         ->join('fornecedores', 'fornecedores.id = compras_requisicoes.fornecedor_id', 'left')
         ->find($id);
 
@@ -339,7 +339,7 @@ public function imprimir($id)
     $itens = $this->itemModel->where('requisicao_id', $id)->findAll();
 
     // 3. Renderiza a View
-    $html = view('compras/impressao_requisicao_pdf', [
+    $html =   view('compras/impressao_requisicao_pdf_v', [
         'requisicao' => $requisicao,
         'itens'      => $itens,
         'empresa'    => $empresa
@@ -349,6 +349,80 @@ public function imprimir($id)
     $pdf = new \App\Libraries\PdfLib();
     $nomeArquivo = "requisicao_" . str_pad($id, 5, '0', STR_PAD_LEFT) . ".pdf";
     $pdf->gerar($html, $nomeArquivo, 'I');
+}
+
+
+/**
+ * Redireciona para o WhatsApp do fornecedor com o link da requisição
+ */
+public function whatsapp($id)
+{
+    // 1. Busca a requisição com os dados do fornecedor
+    $requisicao = $this->reqModel
+        ->select('compras_requisicoes.*, fornecedores.nome_razao, fornecedores.celular')
+        ->join('fornecedores', 'fornecedores.id = compras_requisicoes.fornecedor_id', 'left')
+        ->find($id);
+
+    if (!$requisicao) {
+        return redirect()->back()->with('error', 'Requisição não encontrada.');
+    }
+
+    // 2. Validação do Celular do Fornecedor
+    if (empty($requisicao['celular'])) {
+        return redirect()->back()->with('error', 'O fornecedor não possui celular cadastrado!');
+    }
+
+    // Limpa o número (apenas dígitos)
+    $celular = preg_replace('/[^0-9]/', '', $requisicao['celular']);
+    
+    // Adiciona o código do Brasil (55) se necessário
+    if (strlen($celular) >= 10 && strlen($celular) <= 11) {
+        $celular = "55" . $celular;
+    }
+
+    // 3. Geração do Link Seguro (Hash Hexadecimal)
+    $sal = "mestre_compras_2026"; // Sal exclusivo para o módulo de compras
+    $hash = bin2hex($id . "-" . $sal);
+    $linkPublico = base_url("view/requisicao/{$hash}");
+
+    // 4. Montagem da Mensagem
+    $mensagem = "Olá, *{$requisicao['nome_razao']}*! 📦\n\n";
+    $mensagem .= "Segue os detalhes da nossa *Requisição de Compra #{$id}*.\n\n";
+    $mensagem .= "Você pode visualizar o documento completo no link abaixo:\n";
+    $mensagem .= $linkPublico . "\n\n";
+    $mensagem .= "Por favor, nos retorne com o orçamento ou confirmação de entrega. Obrigado!";
+
+    // 5. URL do WhatsApp
+    $urlFinal = "https://api.whatsapp.com/send?phone={$celular}&text=" . urlencode($mensagem);
+
+    return redirect()->to($urlFinal);
+}
+
+/**
+ * Visualização pública da Requisição (PDF) via Hash
+ */
+public function visualizar_publico($hash)
+{
+    try {
+        // Converte de hexadecimal para string
+        $decodificado = hex2bin($hash);
+        
+        // Separa o ID do Sal
+        $partes = explode("-", $decodificado);
+        $id = $partes[0];
+        $salOriginal = $partes[1] ?? '';
+
+        // Validação de Segurança (mesmo Sal usado no método whatsapp)
+        if (!is_numeric($id) || $salOriginal !== "mestre_compras_2026") {
+            throw new \Exception("Link inválido.");
+        }
+
+        // Chama o método imprimir que já configuramos com a PdfLib
+        return $this->imprimir($id);
+
+    } catch (\Exception $e) {
+        throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound("Link expirado ou inexistente.");
+    }
 }
 
 }
