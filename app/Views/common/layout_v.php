@@ -244,7 +244,34 @@
                     <?php // endif; ?>
                 </a>
             </li>
+              <li class="nav-header">SUPRIMENTOS</li>
 
+<li class="nav-item <?= (strpos(current_url(), 'compras') !== false || strpos(current_url(), 'fornecedores') !== false) ? 'menu-open' : '' ?>">
+    <a href="#" class="nav-link <?= (strpos(current_url(), 'compras') !== false || strpos(current_url(), 'fornecedores') !== false) ? 'active' : '' ?>">
+        <i class="nav-icon fas fa-shopping-cart text-success"></i>
+        <p>Compras e Suprimentos <i class="right fas fa-angle-left"></i></p>
+    </a>
+    <ul class="nav nav-treeview">
+        <li class="nav-item">
+            <a href="<?= base_url('compras/nova') ?>" class="nav-link">
+                <i class="far fa-circle nav-icon text-success"></i>
+                <p>Nova Requisição</p>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= base_url('compras') ?>" class="nav-link">
+                <i class="far fa-circle nav-icon"></i>
+                <p>Gerenciar Compras</p>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="<?= base_url('fornecedores') ?>" class="nav-link <?= (strpos(current_url(), 'fornecedores') !== false) ? 'active' : '' ?>">
+                <i class="far fa-circle nav-icon text-warning"></i>
+                <p>Fornecedores</p>
+            </a>
+        </li>
+    </ul>
+</li>
             <!-- Cabeçalho: CADASTROS -->
             <li class="nav-header">CADASTROS</li>
             

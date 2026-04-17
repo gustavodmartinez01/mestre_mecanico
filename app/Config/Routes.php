@@ -186,7 +186,10 @@ $routes->group('compras', ['filter' => 'auth'], function($routes) {
 
     $routes->get('imprimir/(:num)', 'ComprasController::imprimir/$1');
     $routes->get('whatsapp/(:num)', 'ComprasController::whatsapp/$1');
+
 });
+    $routes->get('relatorios/', 'RelatorioController::index');
+    $routes->get('relatorios/gerar', 'RelatorioController::index');
 
 
 }); // FIM DO GRUPO AUTH (Corrigido: adicionado o parêntese final)
