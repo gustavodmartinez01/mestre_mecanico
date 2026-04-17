@@ -190,7 +190,7 @@ $routes->group('compras', ['filter' => 'auth'], function($routes) {
 });
     $routes->get('relatorios/', 'RelatorioController::index');
     $routes->get('relatorios/gerar', 'RelatorioController::index');
-
+    $routes->get('relatorios/pdf', 'RelatorioController::exportar_pdf');
 
 }); // FIM DO GRUPO AUTH (Corrigido: adicionado o parêntese final)
 $routes->get('view/requisicao/(:any)', 'ComprasController::visualizar_publico/$1');
