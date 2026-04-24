@@ -68,7 +68,7 @@ class RelatorioController extends BaseController
                 ->where('compras_requisicoes.created_at >=', $inicio . ' 00:00:00')
                 ->where('compras_requisicoes.created_at <=', $fim . ' 23:59:59')
                 ->findAll();
-            return view('relatorios/telas/compras_v', $data);
+            return view('relatorios/telas/relatorio_compras_v', $data);
 
         case 'fluxo':
             $data['entradas'] = $this->osModel
@@ -89,6 +89,8 @@ class RelatorioController extends BaseController
             
         // Adicione outros cases conforme necessário...
     }
+            return redirect()->to('relatorios')->with('error', 'Filtros inválidos!');
+
 }
 
 /**
@@ -233,4 +235,131 @@ private function relatorio_fluxo_caixa($inicio, $fim)
 
     $this->pdf->gerar($html, "Fluxo_Caixa_{$inicio}_a_{$fim}.pdf");
 }
+public function fluxo_caixa_dados()
+{
+    $inicio = $this->request->getGet('inicio');
+    $fim    = $this->request->getGet('fim');
+
+    // 1. BUSCA DE ENTRADAS (OS FINALIZADAS)
+    $entradas = $this->osModel
+        ->select('ordem_servicos.*, clientes.nome_razao as cliente_nome, DATE(data_fechamento) as data_dia')
+        ->join('clientes', 'clientes.id = ordem_servicos.cliente_id', 'left')
+        ->where('ordem_servicos.status', 'finalizada')
+        ->where('data_fechamento >=', $inicio . ' 00:00:00')
+        ->where('data_fechamento <=', $fim . ' 23:59:59')
+        ->orderBy('data_fechamento', 'ASC')
+        ->findAll();
+
+    // 2. BUSCA DE OS CANCELADAS (PARA ESTATÍSTICAS)
+    $canceladas = $this->osModel
+        ->where('status', 'cancelada')
+        ->where('updated_at >=', $inicio . ' 00:00:00')
+        ->where('updated_at <=', $fim . ' 23:59:59')
+        ->countAllResults();
+
+    // 3. BUSCA DE SAÍDAS (COMPRAS FINALIZADAS)
+    $saidas = $this->compraModel
+        ->select('compras_requisicoes.*, fornecedores.nome_razao as favorecido, DATE(data_fechamento) as data_dia')
+        ->join('fornecedores', 'fornecedores.id = compras_requisicoes.fornecedor_id', 'left')
+        ->where('status', 'finalizada')
+        ->where('data_fechamento >=', $inicio . ' 00:00:00')
+        ->where('data_fechamento <=', $fim . ' 23:59:59')
+        ->orderBy('data_fechamento', 'ASC')
+        ->findAll();
+
+    // 4. PROCESSAMENTO DO GRÁFICO TEMPORAL E MÉDIAS
+    $periodo = new \DatePeriod(
+        new \DateTime($inicio),
+        new \DateInterval('P1D'),
+        (new \DateTime($fim))->modify('+1 day')
+    );
+
+    $grafico = [
+        'labels'   => [],
+        'entradas' => [],
+        'saidas'   => []
+    ];
+
+    foreach ($periodo as $data) {
+        $dia = $data->format('Y-m-d');
+        $grafico['labels'][] = $data->format('d/m');
+
+        // Soma entradas do dia
+        $somaE = array_sum(array_column(array_filter($entradas, function($e) use ($dia) {
+            return $e['data_dia'] == $dia;
+        }), 'valor_total'));
+
+        // Soma saídas do dia
+        $somaS = array_sum(array_column(array_filter($saidas, function($s) use ($dia) {
+            return $s['data_dia'] == $dia;
+        }), 'valor_total'));
+
+        $grafico['entradas'][] = (float)$somaE;
+        $grafico['saidas'][]   = (float)$somaS;
+    }
+
+    // 5. CÁLCULO DE TEMPO MÉDIO DE EXECUÇÃO (Horas)
+    $temposExecucao = [];
+    foreach ($entradas as $os) {
+        if ($os['data_aprovacao'] && $os['data_fechamento']) {
+            $dataAprov = new \DateTime($os['data_aprovacao']);
+            $dataFech  = new \DateTime($os['data_fechamento']);
+            $intervalo = $dataAprov->diff($dataFech);
+            
+            // Converte tudo para horas
+            $horasTotais = ($intervalo->days * 24) + $intervalo->h + ($intervalo->i / 60);
+            $temposExecucao[] = $horasTotais;
+        }
+    }
+    $tempoMedio = count($temposExecucao) > 0 ? array_sum($temposExecucao) / count($temposExecucao) : 0;
+
+    // 6. CÁLCULO DE MÉDIA MENSAL
+    $d1 = new \DateTime($inicio);
+    $d2 = new \DateTime($fim);
+    $diffMeses = $d1->diff($d2)->m + ($d1->diff($d2)->y * 12);
+    $mesesParaDivisao = ($diffMeses < 1) ? 1 : $diffMeses + 1;
+    $mediaMensal = count($entradas) / $mesesParaDivisao;
+
+    // 7. MONTAGEM DO RETORNO JSON
+    return $this->response->setJSON([
+        'html' => view('relatorios/telas/tabela_fluxo_parcial_v', [
+            'entradas' => $entradas,
+            'saidas'   => $saidas,
+            'stats'    => [
+                'total_concluidas' => count($entradas),
+                'total_canceladas' => $canceladas,
+                'tempo_medio'      => number_format($tempoMedio, 1, ',', '.'),
+                'media_mensal'     => number_format($mediaMensal, 1, ',', '.')
+            ]
+        ]),
+        'grafico' => $grafico,
+        'totais'  => [
+            'entradas' => array_sum($grafico['entradas']),
+            'saidas'   => array_sum($grafico['saidas'])
+        ]
+    ]);
+}
+/**
+ * Renderiza a tela principal do Fluxo de Caixa com filtros e containers para AJAX
+ */
+public function fluxo_caixa_view()
+{
+    // Dados básicos para o cabeçalho da página
+    $data = [
+        'title' => 'Relatório de Fluxo de Caixa',
+        'menu'  => 'relatorios',
+        // Podemos passar a empresa para o caso de querer exibir o logo já no carregamento
+        'empresa' => $this->empresaModel->first()
+    ];
+
+    return view('relatorios/telas/relatorio_fluxo_caixa_v', $data);
+}
+
+private function calcularMediaMensal($total, $inicio, $fim) {
+    $d1 = new \DateTime($inicio);
+    $d2 = new \DateTime($fim);
+    $meses = $d1->diff($d2)->m + ($d1->diff($d2)->y * 12) + 1;
+    return number_format($total / $meses, 1, ',', '.');
+}
+
 }

@@ -188,9 +188,32 @@ $routes->group('compras', ['filter' => 'auth'], function($routes) {
     $routes->get('whatsapp/(:num)', 'ComprasController::whatsapp/$1');
 
 });
-    $routes->get('relatorios/', 'RelatorioController::index');
-    $routes->get('relatorios/gerar', 'RelatorioController::index');
-    $routes->get('relatorios/pdf', 'RelatorioController::exportar_pdf');
+// Grupo de Relatórios para organização
+$routes->group('relatorios', function($routes) {
+    
+    // Tela Principal (Cards)
+    $routes->get('/', 'RelatorioController::index');
+
+    // --- FLUXO DE CAIXA ---
+    // Tela de visualização
+    $routes->get('fluxo-caixa', 'RelatorioController::fluxo_caixa_view');
+    // Endpoint AJAX que retorna JSON (Dados + Gráfico + Tabela Parcial)
+    $routes->get('fluxo-caixa-dados', 'RelatorioController::fluxo_caixa_dados');
+
+    // --- COMPRAS ---
+    // Tela de visualização
+    $routes->get('compras', 'RelatorioController::compras_view');
+    // Endpoint AJAX para dados de compras
+    $routes->get('compras-dados', 'RelatorioController::compras_dados');
+
+    // --- PRODUTIVIDADE ---
+    $routes->get('produtividade', 'RelatorioController::produtividade_view');
+    $routes->get('produtividade-dados', 'RelatorioController::produtividade_dados');
+
+    // --- EXPORTAÇÃO ---
+    // Rota única que processa o PDF (recebe ?tipo=...&inicio=...&fim=...)
+    $routes->get('pdf', 'RelatorioController::exportar_pdf');
+});
 
 }); // FIM DO GRUPO AUTH (Corrigido: adicionado o parêntese final)
 $routes->get('view/requisicao/(:any)', 'ComprasController::visualizar_publico/$1');

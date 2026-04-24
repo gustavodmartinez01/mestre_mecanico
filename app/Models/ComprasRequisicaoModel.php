@@ -9,8 +9,15 @@ class ComprasRequisicaoModel extends Model
     protected $table            = 'compras_requisicoes';
     protected $primaryKey       = 'id';
     protected $allowedFields    = [
-        'empresa_id', 'fornecedor_id', 'usuario_id', 
-        'data_requisicao', 'status', 'valor_total', 'observacoes'
+        'empresa_id', 
+        'fornecedor_id', 
+        'usuario_id', 
+        'data_requisicao', 
+        'status', 
+        'valor_total', 
+        'pago_na_entrega',
+        'observacoes', 
+        'data_fechamento'
     ];
 
     protected $useTimestamps = true;
