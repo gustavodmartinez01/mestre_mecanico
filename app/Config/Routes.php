@@ -213,6 +213,9 @@ $routes->group('relatorios', function($routes) {
     // --- EXPORTAÇÃO ---
     // Rota única que processa o PDF (recebe ?tipo=...&inicio=...&fim=...)
     $routes->get('pdf', 'RelatorioController::exportar_pdf');
+
+    $routes->get('balanco', 'RelatorioController::balanco_view');
+    $routes->get('balanco-dados', 'RelatorioController::balanco_dados');
 });
 
 }); // FIM DO GRUPO AUTH (Corrigido: adicionado o parêntese final)

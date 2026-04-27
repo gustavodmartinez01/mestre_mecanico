@@ -362,4 +362,136 @@ private function calcularMediaMensal($total, $inicio, $fim) {
     return number_format($total / $meses, 1, ',', '.');
 }
 
+public function compras_view()
+{
+    return view('relatorios/telas/relatorio_compras_v', ['title' => 'Relatório de Suprimentos']);
+}
+
+public function compras_dados()
+{
+    $inicio = $this->request->getGet('inicio');
+    $fim    = $this->request->getGet('fim');
+
+    // 1. Busca as requisições de compra finalizadas
+    $compras = $this->compraModel
+        ->select('compras_requisicoes.*, fornecedores.nome_razao as fornecedor_nome')
+        ->join('fornecedores', 'fornecedores.id = compras_requisicoes.fornecedor_id', 'left')
+        ->where('status', 'finalizada')
+        ->where('data_fechamento >=', $inicio . ' 00:00:00')
+        ->where('data_fechamento <=', $fim . ' 23:59:59')
+        ->findAll();
+
+    // 2. Busca itens para o gráfico (agrupando por Marca, já que não há categoria)
+    $db = \Config\Database::connect();
+    $itens = $db->table('compras_requisicoes_itens as itens') // Nome da tabela corrigido
+        ->select('p.marca, SUM(itens.subtotal) as total_marca')
+        ->join('produtos as p', 'p.id = itens.produto_id')
+        ->join('compras_requisicoes as r', 'r.id = itens.requisicao_id') // Ajuste o nome da FK se necessário
+        ->where('r.status', 'finalizada')
+        ->where('r.data_fechamento >=', $inicio . ' 00:00:00')
+        ->where('r.data_fechamento <=', $fim . ' 23:59:59')
+        ->groupBy('p.marca')
+        ->orderBy('total_marca', 'DESC')
+        ->get()->getResultArray();
+
+    // 3. Prepara dados do gráfico
+    $grafico = [
+        'labels' => array_map(function($i) { return $i['marca'] ?: 'Sem Marca'; }, $itens),
+        'valores' => array_column($itens, 'total_marca')
+    ];
+
+    // 4. Estatísticas Operacionais
+    $stats = [
+        'total_compras'  => count($compras),
+        'valor_total'    => (float) array_sum(array_column($compras, 'valor_total')),
+        'ticket_medio'   => count($compras) > 0 ? array_sum(array_column($compras, 'valor_total')) / count($compras) : 0,
+        'marcas_distintas' => count($itens)
+    ];
+
+    return $this->response->setJSON([
+        'html' => view('relatorios/telas/tabela_compras_parcial_v', [
+            'compras' => $compras,
+            'stats'   => $stats
+        ]),
+        'grafico' => $grafico
+    ]);
+}
+public function balanco_dados()
+{
+    $inicio = $this->request->getGet('inicio');
+    $fim    = $this->request->getGet('fim');
+
+    // 1. Totais de Receitas (OS Finalizadas)
+    $receitas = $this->osModel
+        ->select('DATE(data_fechamento) as dia, SUM(valor_total) as total')
+        ->where('status', 'finalizada')
+        ->where('data_fechamento >=', $inicio . ' 00:00:00')
+        ->where('data_fechamento <=', $fim . ' 23:59:59')
+        ->groupBy('DATE(data_fechamento)')
+        ->findAll();
+
+    // 2. Totais de Despesas (Compras Finalizadas)
+    $despesas = $this->compraModel
+        ->select('DATE(data_fechamento) as dia, SUM(valor_total) as total')
+        ->where('status', 'finalizada')
+        ->where('data_fechamento >=', $inicio . ' 00:00:00')
+        ->where('data_fechamento <=', $fim . ' 23:59:59')
+        ->groupBy('DATE(data_fechamento)')
+        ->findAll();
+
+    // 3. Processamento da Evolução Temporal
+    $periodo = new \DatePeriod(new \DateTime($inicio), new \DateInterval('P1D'), (new \DateTime($fim))->modify('+1 day'));
+    
+    $labels = [];
+    $dataLucroPrejuizo = [];
+    $dataSaldoAcumulado = [];
+    $saldoAcumulado = 0;
+    $totalR = 0;
+    $totalD = 0;
+
+    foreach ($periodo as $dt) {
+        $dia = $dt->format('Y-m-d');
+        $labels[] = $dt->format('d/m');
+
+        $rDia = array_sum(array_column(array_filter($receitas, fn($r) => $r['dia'] == $dia), 'total'));
+        $dDia = array_sum(array_column(array_filter($despesas, fn($d) => $d['dia'] == $dia), 'total'));
+        
+        $lucroDia = $rDia - $dDia;
+        $saldoAcumulado += $lucroDia;
+        
+        $dataLucroPrejuizo[] = (float)$lucroDia;
+        $dataSaldoAcumulado[] = (float)$saldoAcumulado;
+        
+        $totalR += $rDia;
+        $totalD += $dDia;
+    }
+
+    return $this->response->setJSON([
+        'html' => view('relatorios/telas/tabela_balanco_parcial_v', [
+            'receitas' => $totalR,
+            'despesas' => $totalD,
+            'lucro'    => $totalR - $totalD
+        ]),
+        'grafico' => [
+            'labels' => $labels,
+            'evolucao' => $dataLucroPrejuizo, // Barras (Resultado do dia)
+            'caixa' => $dataSaldoAcumulado   // Linha (Saúde do caixa)
+        ]
+    ]);
+}
+
+/**
+ * Renderiza a página principal do Balanço e Saúde Financeira
+ */
+public function balanco_view()
+{
+    // O título pode ser passado para o layout_v através do array de dados
+    $data = [
+        'title' => 'Balanço de Saúde Financeira',
+        // Você pode passar outras variáveis aqui se o seu layout_v exigir
+    ];
+
+    return view('relatorios/telas/relatorio_balanco_v', $data);
+}
+
 }
