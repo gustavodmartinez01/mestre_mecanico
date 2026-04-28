@@ -4,7 +4,7 @@ namespace App\Controllers;
 
 use App\Controllers\BaseController;
 use App\Models\OrdemServicoModel;
-use App\Models\ContaReceberModel; // Usando seu model oficial
+use App\Models\ContasReceberModel; // Usando seu model oficial
 
 class FinanceiroController extends BaseController
 {
@@ -14,7 +14,7 @@ class FinanceiroController extends BaseController
     public function __construct()
     {
         $this->osModel = new OrdemServicoModel();
-        $this->contaModel = new ContaReceberModel();
+        $this->contaModel = new ContasReceberModel();
     }
 
     public function pagamento($id)
@@ -126,4 +126,40 @@ class FinanceiroController extends BaseController
     
     return $pdf->gerar($html, "Recibo_".$registro['id'].".pdf");
 }
+public function fluxo_caixa()
+{
+    return view('financeiro/fluxo_caixa_v', [
+        'title' => 'Fluxo de Caixa (Movimentações)'
+    ]);
+}
+
+public function fluxo_caixa_dados()
+{
+    $inicio = $this->request->getGet('inicio') ?: date('Y-m-01');
+    $fim    = $this->request->getGet('fim') ?: date('Y-m-d');
+
+    // Busca as movimentações reais da tabela financeiro_movimentacoes
+    $movimentacoes = $this->financeiroMovimentacoesModel
+        ->where('data_movimentacao >=', $inicio)
+        ->where('data_movimentacao <=', $fim)
+        ->orderBy('data_movimentacao', 'DESC') // Ordem inversa para ver o mais recente primeiro
+        ->findAll();
+
+    // Calcula os totais do período
+    $totalEntradas = array_sum(array_column(array_filter($movimentacoes, fn($m) => $m['tipo'] == 'entrada'), 'valor'));
+    $totalSaidas   = array_sum(array_column(array_filter($movimentacoes, fn($m) => $m['tipo'] == 'saida'), 'valor'));
+
+    return $this->response->setJSON([
+        'html' => view('financeiro/tabela_fluxo_caixa_parcial_v', [
+            'movimentacoes' => $movimentacoes,
+            'resumo' => [
+                'entradas' => $totalEntradas,
+                'saidas'   => $totalSaidas,
+                'saldo'    => $totalEntradas - $totalSaidas
+            ]
+        ])
+    ]);
+}
+
+
 }

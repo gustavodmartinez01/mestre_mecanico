@@ -125,9 +125,12 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
     });
 
     // Rotas de Financeiro
-    $routes->get('financeiro/pagamento/(:num)', 'FinanceiroController::pagamento/$1');
-    $routes->post('financeiro/processar_pagamento', 'FinanceiroController::processar_pagamento');
-    
+    $routes->group('fluxo-caixa', function($routes){
+    $routes->get('pagamento/(:num)', 'FinanceiroController::pagamento/$1');
+    $routes->post('processar_pagamento', 'FinanceiroController::processar_pagamento');
+    $routes->get('/', 'FinanceiroController::fluxo_caixa');
+    $routes->get('fluxo-caixa-dados', 'FinanceiroController::fluxo_caixa_dados');
+    });
 
     $routes->group('contas-receber', function($routes) {
     $routes->get('/', 'ContasReceberController::index'); // Tela Principal

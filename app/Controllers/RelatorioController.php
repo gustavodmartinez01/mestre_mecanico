@@ -8,6 +8,14 @@ use App\Models\ComprasRequisicaoModel;
 use App\Models\ComprasItemModel;
 use App\Models\OrdemServicoModel;
 use App\Models\EmpresaModel;
+use App\Models\ContasPagarModel;
+use App\Models\ContasReceberModel;
+use App\Models\FinanceiroMovimentacaoModel;
+
+
+
+
+
 
 class RelatorioController extends BaseController
 {
@@ -15,6 +23,9 @@ class RelatorioController extends BaseController
     protected $itemCompraModel;
     protected $osModel;
     protected $empresaModel;
+    protected $contasPagarModel;
+    protected $contasReceberModel;
+    protected $financeiroMovimentacoesModel;
     protected $pdf;
 
     public function __construct()
@@ -24,6 +35,10 @@ class RelatorioController extends BaseController
         $this->itemCompraModel = new ComprasItemModel();
         $this->osModel         = new OrdemServicoModel();
         $this->empresaModel    = new EmpresaModel();
+        $this->contasPagarModel = new ContasPagarModel();
+        $this->contasReceberModel = new ContasReceberModel();
+        $this->financeiroMovimentacoesModel = new FinanceiroMovimentacaoModel();
+
         
         // Inicializa a biblioteca PdfLib (mPDF)
         $this->pdf = new PdfLib();
@@ -418,68 +433,81 @@ public function compras_dados()
 }
 public function balanco_dados()
 {
-    $inicio = $this->request->getGet('inicio');
-    $fim    = $this->request->getGet('fim');
+    try {
+        $inicio = $this->request->getGet('inicio');
+        $fim    = $this->request->getGet('fim');
 
-    // 1. Totais de Receitas (OS Finalizadas)
-    $receitas = $this->osModel
-        ->select('DATE(data_fechamento) as dia, SUM(valor_total) as total')
-        ->where('status', 'finalizada')
-        ->where('data_fechamento >=', $inicio . ' 00:00:00')
-        ->where('data_fechamento <=', $fim . ' 23:59:59')
-        ->groupBy('DATE(data_fechamento)')
-        ->findAll();
+        if (!$inicio || !$fim) {
+            throw new \Exception("Datas não fornecidas.");
+        }
 
-    // 2. Totais de Despesas (Compras Finalizadas)
-    $despesas = $this->compraModel
-        ->select('DATE(data_fechamento) as dia, SUM(valor_total) as total')
-        ->where('status', 'finalizada')
-        ->where('data_fechamento >=', $inicio . ' 00:00:00')
-        ->where('data_fechamento <=', $fim . ' 23:59:59')
-        ->groupBy('DATE(data_fechamento)')
-        ->findAll();
+        // 1. MOVIMENTAÇÕES REALIZADAS (Ordenação CRUCIAL para o saldo acumulado)
+        $movimentacoes = $this->financeiroMovimentacoesModel
+            ->where('data_movimentacao >=', $inicio)
+            ->where('data_movimentacao <=', $fim)
+            ->orderBy('data_movimentacao', 'ASC') // Garante a cronologia do extrato
+            ->orderBy('id', 'ASC')               // Desempate por ordem de inserção
+            ->findAll();
 
-    // 3. Processamento da Evolução Temporal
-    $periodo = new \DatePeriod(new \DateTime($inicio), new \DateInterval('P1D'), (new \DateTime($fim))->modify('+1 day'));
-    
-    $labels = [];
-    $dataLucroPrejuizo = [];
-    $dataSaldoAcumulado = [];
-    $saldoAcumulado = 0;
-    $totalR = 0;
-    $totalD = 0;
+        // 2. BUSCA DE DADOS PARA SITUAÇÃO CRÍTICA (Saldo de Vencidos)
+        $vencidasPagar = $this->contasPagarModel
+            ->selectSum('valor_original')
+            ->where('status', 'vencida')
+            ->first();
 
-    foreach ($periodo as $dt) {
-        $dia = $dt->format('Y-m-d');
-        $labels[] = $dt->format('d/m');
+        $pendentesReceber = $this->contasReceberModel
+            ->selectSum('valor_original')
+            ->whereIn('status', ['pendente', 'vencida'])
+            ->first();
 
-        $rDia = array_sum(array_column(array_filter($receitas, fn($r) => $r['dia'] == $dia), 'total'));
-        $dDia = array_sum(array_column(array_filter($despesas, fn($d) => $d['dia'] == $dia), 'total'));
-        
-        $lucroDia = $rDia - $dDia;
-        $saldoAcumulado += $lucroDia;
-        
-        $dataLucroPrejuizo[] = (float)$lucroDia;
-        $dataSaldoAcumulado[] = (float)$saldoAcumulado;
-        
-        $totalR += $rDia;
-        $totalD += $dDia;
+        $totalVencidoPagar = (float)($vencidasPagar['valor_original'] ?? 0);
+        $totalPendenteReceber = (float)($pendentesReceber['valor_original'] ?? 0);
+
+        // 3. ALERTAS: Contas Recorrentes (Pagar) do Mês Atual
+        $alertasRecorrentes = $this->contasPagarModel
+            ->where('is_recorrente', 1)
+            ->whereIn('status', ['pendente', 'vencida'])
+            ->where("DATE_FORMAT(data_vencimento, '%Y-%m')", date('Y-m'))
+            ->findAll();
+
+        // 4. ALERTAS: Devedores (Receber) do Mês Atual
+        $alertasDevedores = $this->contasReceberModel
+            ->select('contas_receber.*, clientes.nome_razao as devedor_nome')
+            ->join('clientes', 'clientes.id = contas_receber.cliente_id')
+            ->whereIn('contas_receber.status', ['pendente', 'vencida'])
+            ->where("DATE_FORMAT(data_vencimento, '%Y-%m')", date('Y-m'))
+            ->findAll();
+
+        // 5. PROCESSAMENTO DO GRÁFICO (Usando o helper)
+        $grafico = $this->prepararGraficoEvolucao($movimentacoes, $inicio, $fim);
+
+        // 6. RENDERIZAÇÃO DA VIEW PARCIAL
+        $html = view('relatorios/telas/tabela_balanco_parcial_v', [
+            'movimentacoes' => $movimentacoes,
+            'critico' => [
+                'is_critico'     => ($totalVencidoPagar > $totalPendenteReceber),
+                'vencidas_total' => $totalVencidoPagar,
+                'receber_total'  => $totalPendenteReceber
+            ],
+            'alertas' => [
+                'recorrentes' => $alertasRecorrentes,
+                'devedores'   => $alertasDevedores
+            ]
+        ]);
+
+        return $this->response->setJSON([
+            'status'  => 'success',
+            'html'    => $html,
+            'grafico' => $grafico
+        ]);
+
+    } catch (\Exception $e) {
+        return $this->response->setStatusCode(500)->setJSON([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ]);
     }
-
-    return $this->response->setJSON([
-        'html' => view('relatorios/telas/tabela_balanco_parcial_v', [
-            'receitas' => $totalR,
-            'despesas' => $totalD,
-            'lucro'    => $totalR - $totalD
-        ]),
-        'grafico' => [
-            'labels' => $labels,
-            'evolucao' => $dataLucroPrejuizo, // Barras (Resultado do dia)
-            'caixa' => $dataSaldoAcumulado   // Linha (Saúde do caixa)
-        ]
-    ]);
 }
-
 /**
  * Renderiza a página principal do Balanço e Saúde Financeira
  */
@@ -493,5 +521,62 @@ public function balanco_view()
 
     return view('relatorios/telas/relatorio_balanco_v', $data);
 }
+
+/**
+ * Processa a evolução temporal para o gráfico misto e indicadores.
+ * * @param array $movimentacoes Dados vindos de financeiro_movimentacoes
+ * @param string $inicio Data Y-m-d
+ * @param string $fim Data Y-m-d
+ * @return array Estrutura para Chart.js
+ */
+private function prepararGraficoEvolucao($movimentacoes, $inicio, $fim)
+{
+    // Cria o período completo dia a dia para garantir que dias sem movimento apareçam no gráfico
+    $periodo = new \DatePeriod(
+        new \DateTime($inicio),
+        new \DateInterval('P1D'),
+        (new \DateTime($fim))->modify('+1 day')
+    );
+
+    $labels = [];
+    $evolucaoDiaria = []; // Barras: Resultado individual de cada dia
+    $caixaAcumulado = []; // Linha: Saldo real em conta naquele momento
+    $saldoCorrente  = 0;
+
+    foreach ($periodo as $data) {
+        $dia = $data->format('Y-m-d');
+        $labels[] = $data->format('d/m');
+
+        // Filtra entradas e saídas do dia específico dentro do array já ordenado
+        $entradasDia = array_filter($movimentacoes, function($m) use ($dia) {
+            return $m['data_movimentacao'] == $dia && $m['tipo'] == 'entrada';
+        });
+
+        $saidasDia = array_filter($movimentacoes, function($m) use ($dia) {
+            return $m['data_movimentacao'] == $dia && $m['tipo'] == 'saida';
+        });
+
+        // Soma os valores brutos
+        $somaEntradas = array_sum(array_column($entradasDia, 'valor'));
+        $somaSaidas   = array_sum(array_column($saidasDia, 'valor'));
+
+        // Cálculo do fôlego do dia (Lucro ou Prejuízo diário)
+        $resultadoDoDia = (float)$somaEntradas - (float)$somaSaidas;
+        
+        // Atualiza o saldo acumulado (Saúde Financeira)
+        $saldoCorrente += $resultadoDoDia;
+
+        // Alimenta os arrays para o Chart.js
+        $evolucaoDiaria[] = $resultadoDoDia;
+        $caixaAcumulado[] = (float)$saldoCorrente;
+    }
+
+    return [
+        'labels'   => $labels,
+        'evolucao' => $evolucaoDiaria, // Eixo Y das Barras
+        'caixa'    => $caixaAcumulado  // Eixo Y da Linha de Tendência
+    ];
+}
+
 
 }
