@@ -36,7 +36,7 @@
         $('#div_resultado_fluxo').html('<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>');
 
         $.ajax({
-            url: '<?= base_url("financeiro/fluxo-caixa-dados") ?>',
+            url: '<?= base_url("fluxo-caixa/fluxo-caixa-dados") ?>',
             type: 'GET',
             data: { inicio, fim },
             dataType: 'json',

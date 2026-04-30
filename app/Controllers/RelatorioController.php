@@ -86,20 +86,24 @@ class RelatorioController extends BaseController
             return view('relatorios/telas/relatorio_compras_v', $data);
 
         case 'fluxo':
-            $data['entradas'] = $this->osModel
-                ->select('id, data_saida as data, cliente_nome, valor_total')
-                ->where('status', 'finalizada')
-                ->where('data_saida >=', $inicio)
-                ->where('data_saida <=', $fim)
-                ->findAll();
+    // Busca TODAS as movimentações (OS, Compras, Despesas Fixas, etc.)
+    $movimentacoes = $this->financeiroMovimentacoesModel
+        ->where('data_movimentacao >=', $inicio)
+        ->where('data_movimentacao <=', $fim)
+        ->orderBy('data_movimentacao', 'ASC')
+        ->orderBy('id', 'ASC')
+        ->findAll();
 
-            $data['saidas'] = $this->compraModel
-                ->select('compras_requisicoes.id, compras_requisicoes.data_fechamento as data, fornecedores.nome_razao as favorecido, valor_total')
-                ->join('fornecedores', 'fornecedores.id = compras_requisicoes.fornecedor_id', 'left')
-                ->where('status', 'finalizada')
-                ->where('data_fechamento >=', $inicio)
-                ->where('data_fechamento <=', $fim)
-                ->findAll();
+    $data['movimentacoes'] = $movimentacoes;
+    
+    // Cálculo de totais para o cabeçalho/rodapé do PDF
+    $data['total_entradas'] = array_sum(array_column(array_filter($movimentacoes, fn($m) => $m['tipo'] == 'entrada'), 'valor'));
+    $data['total_saidas']   = array_sum(array_column(array_filter($movimentacoes, fn($m) => $m['tipo'] == 'saida'), 'valor'));
+    $data['saldo_periodo']  = $data['total_entradas'] - $data['total_saidas'];
+    
+    // Nome do arquivo PDF
+    $data['titulo_relatorio'] = "Extrato de Fluxo de Caixa Completo";
+   
             return view('relatorios/telas/fluxo_caixa_v', $data);
             
         // Adicione outros cases conforme necessário...
@@ -145,13 +149,25 @@ public function exportar_pdf()
             $nomeArquivo = "Relatorio_Compras_{$inicio}.pdf";
             break;
 
-        case 'fluxo':
-            $data['entradas'] = $this->osModel
-                ->select('id, data_saida as data, cliente_nome, valor_total')
-                ->where('status', 'finalizada')
-                ->where('data_saida >=', $inicio)
-                ->where('data_saida <=', $fim)
-                ->findAll();
+       case 'fluxo':
+    // Busca TODAS as movimentações (OS, Compras, Despesas Fixas, etc.)
+    $movimentacoes = $this->financeiroMovimentacoesModel
+        ->where('data_movimentacao >=', $inicio)
+        ->where('data_movimentacao <=', $fim)
+        ->orderBy('data_movimentacao', 'ASC')
+        ->orderBy('id', 'ASC')
+        ->findAll();
+
+    $data['movimentacoes'] = $movimentacoes;
+    
+    // Cálculo de totais para o cabeçalho/rodapé do PDF
+    $data['total_entradas'] = array_sum(array_column(array_filter($movimentacoes, fn($m) => $m['tipo'] == 'entrada'), 'valor'));
+    $data['total_saidas']   = array_sum(array_column(array_filter($movimentacoes, fn($m) => $m['tipo'] == 'saida'), 'valor'));
+    $data['saldo_periodo']  = $data['total_entradas'] - $data['total_saidas'];
+    
+    // Nome do arquivo PDF
+    $data['titulo_relatorio'] = "Extrato de Fluxo de Caixa Completo";
+    
 
             $data['saidas'] = $this->compraModel
                 ->select('compras_requisicoes.id, compras_requisicoes.data_fechamento as data, fornecedores.nome_razao as favorecido, valor_total')
@@ -161,7 +177,7 @@ public function exportar_pdf()
                 ->where('data_fechamento <=', $fim)
                 ->findAll();
 
-            $html = view('relatorios/pdf_fluxo_caixa_v', $data);
+            $html = view('relatorios/relatorio_fluxo_caixa_pdf_v', $data);
             $nomeArquivo = "Fluxo_Caixa_{$inicio}_a_{$fim}.pdf";
             break;
 

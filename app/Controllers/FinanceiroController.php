@@ -5,16 +5,20 @@ namespace App\Controllers;
 use App\Controllers\BaseController;
 use App\Models\OrdemServicoModel;
 use App\Models\ContasReceberModel; // Usando seu model oficial
+use App\Models\FinanceiroMovimentacaoModel;
+
 
 class FinanceiroController extends BaseController
 {
     protected $osModel;
     protected $contaModel;
+    protected $financeiroMovimentacoesModel;
 
     public function __construct()
     {
         $this->osModel = new OrdemServicoModel();
         $this->contaModel = new ContasReceberModel();
+        $this->financeiroMovimentacoesModel = new FinanceiroMovimentacaoModel();
     }
 
     public function pagamento($id)

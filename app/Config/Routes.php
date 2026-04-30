@@ -221,6 +221,16 @@ $routes->group('relatorios', function($routes) {
     $routes->get('balanco-dados', 'RelatorioController::balanco_dados');
 });
 
+$routes->group('veiculos', function($routes) {
+    $routes->get('/', 'VeiculoController::index');
+    $routes->get('detalhes/(:num)', 'VeiculoController::detalhes/$1');
+    $routes->post('salvar', 'VeiculoController::salvar');
+    $routes->get('buscarPorCliente/(:num)', 'VeiculoController::buscarPorCliente/$1');
+    $routes->post('salvarRapido', 'VeiculoController::salvarRapido');
+});
+
+
+
 }); // FIM DO GRUPO AUTH (Corrigido: adicionado o parêntese final)
 $routes->get('view/requisicao/(:any)', 'ComprasController::visualizar_publico/$1');
 
