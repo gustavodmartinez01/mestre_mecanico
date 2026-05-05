@@ -225,11 +225,7 @@ public function exportar_pdf()
      * RELATÓRIO: Produtividade por Técnico
      * (Apenas esboço - podemos codificar a lógica completa agora se quiser)
      */
-    private function relatorio_produtividade($inicio, $fim)
-    {
-        // Lógica para buscar OS finalizadas e somar mão de obra por técnico
-        die("Relatório de produtividade em desenvolvimento com OrdemServicoModel...");
-    }
+   
 
     /**
  * RELATÓRIO: Fluxo de Caixa (Entradas vs Saídas)
@@ -593,6 +589,45 @@ private function prepararGraficoEvolucao($movimentacoes, $inicio, $fim)
         'caixa'    => $caixaAcumulado  // Eixo Y da Linha de Tendência
     ];
 }
+public function produtividade_view()
+{
+    $inicio = $this->request->getGet('inicio') ?? date('Y-m-01');
+    $fim = $this->request->getGet('fim') ?? date('Y-m-t');
+    $empresaId = session()->get('empresa_id');
 
+    $db = \Config\Database::connect();
+
+    // 1. Resumo de OS no período
+    $resumoOS = $this->osModel
+        ->select('status, COUNT(id) as total, SUM(valor_total) as financeiro')
+        ->where('empresa_id', $empresaId)
+        ->where('data_abertura >=', $inicio)
+        ->where('data_abertura <=', $fim)
+        ->groupBy('status')
+        ->findAll();
+
+    // 2. Ranking de itens mais vendidos (Peças/Serviços)
+    // Usando query builder para buscar na tabela de itens da OS
+    $rankingItens = $db->table('ordem_servico_itens oi')
+        ->select('oi.descricao, SUM(oi.quantidade) as qtd, SUM(oi.subtotal) as total_gerado')
+        ->join('ordem_servicos os', 'os.id = oi.ordem_servico_id')
+        ->where('os.empresa_id', $empresaId)
+        ->where('os.data_abertura >=', $inicio)
+        ->where('os.data_abertura <=', $fim)
+        ->groupBy('oi.descricao')
+        ->orderBy('total_gerado', 'DESC')
+        ->limit(10)
+        ->get()->getResultArray();
+
+    $data = [
+        'title'        => 'Relatório de Produtividade',
+        'inicio'       => $inicio,
+        'fim'          => $fim,
+        'resumoOS'     => $resumoOS,
+        'rankingItens' => $rankingItens
+    ];
+
+    return view('relatorios/produtividade_v', $data);
+}
 
 }

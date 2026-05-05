@@ -7,18 +7,34 @@ use App\Models\ClienteModel;
 use App\Models\VeiculoModel;
 use App\Models\ServicoModel;
 use App\Models\ProdutoModel;
-use App\Models\EstoqueMovModel;
-use App\Models\OsItemModel; // Você precisará criar este Model
+use App\Models\EstoqueMovimentacaoModel;
+use App\Models\OsItemModel; 
 use App\Models\OsFotoModel; // Você precisará criar este Model
 
 class OrdemServicoController extends BaseController
 {
     protected $osModel;
     protected $helpers = ['form', 'url', 'text', 'filesystem'];
+    protected $itensModel;
+    protected $clienteModel;
+    protected $veiculoModel;
+    protected $servicoModel;
+    protected $produtoModel;
+    protected $estoqueMovModel;
+    protected $osFotoModel;
+
+
 
     public function __construct()
     {
         $this->osModel = new OrdemServicoModel();
+        $this->itensModel = new OsItemModel();
+        $this->clienteModel = new ClienteModel();
+        $this->veiculoModel = new VeiculoModel();
+        $this->produtoModel = new ProdutoModel();
+        $this->estoqueMovModel = new EstoqueMovimentacaoModel();
+        $this->osFotoModel = new OsFotoModel();
+
     }
 
     /**
@@ -198,7 +214,7 @@ class OrdemServicoController extends BaseController
         ];
 
         // Movimentação de Estoque
-        $movModel = new \App\Models\EstoqueMovModel();
+        $movModel = new $this->estoqueMovModel();
         $movModel->insert([
             'produto_id' => $itemId,
             'empresa_id' => session()->get('empresa_id'),
@@ -826,5 +842,36 @@ public function cancelar($id)
         return redirect()->back()->with('error', 'Erro ao processar o cancelamento.');
     }
 }
+public function detalhes($id)
+{
+    $empresaId = session()->get('empresa_id');
+
+    // 1. Busca os dados principais da OS com Join no Cliente e Veículo
+    $os = $this->osModel
+        ->select('ordem_servicos.*, clientes.nome_razao as cliente_nome, clientes.telefone as cliente_fone, veiculos.placa, veiculos.modelo, veiculos.marca')
+        ->join('clientes', 'clientes.id = ordem_servicos.cliente_id')
+        ->join('veiculos', 'veiculos.id = ordem_servicos.veiculo_id')
+        ->where(['ordem_servicos.id' => $id, 'ordem_servicos.empresa_id' => $empresaId])
+        ->first();
+
+    if (!$os) {
+        return redirect()->to('/os')->with('error', 'Ordem de Serviço não encontrada.');
+    }
+
+    // 2. Busca os itens da OS (Peças e Serviços)
+    // Supondo que você tenha um model OsItensModel
+    //$itensModel = new \App\Models\OsItensModel();
+    $itens = $this->itensModel->where('ordem_servico_id', $id)->findAll();
+
+    $data = [
+        'title' => 'Ordem de Serviço #' . $id,
+        'os'    => $os,
+        'itens' => $itens
+    ];
+
+    return view('os/os_detalhes_v', $data);
+}
+
+
 
 }

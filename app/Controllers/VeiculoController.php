@@ -166,4 +166,61 @@ class VeiculoController extends BaseController
 
         return redirect()->back()->with('error', 'Não autorizado ou veículo inexistente.');
     }
+/**
+ * Abre o formulário de edição com os dados do veículo e lista de clientes
+ */
+public function editar($id)
+{
+    $empresaId = session()->get('empresa_id');
+
+    // 1. Busca o veículo garantindo que pertence à empresa logada
+    $veiculo = $this->veiculoModel
+        ->where(['id' => $id, 'empresa_id' => $empresaId])
+        ->first();
+
+    if (!$veiculo) {
+        return redirect()->to('/veiculos')->with('error', 'Veículo não encontrado ou acesso negado.');
+    }
+
+    // 2. Busca todos os clientes para o dropdown (select) do formulário
+    // Usamos o model de Clientes para isso
+    $clienteModel = new \App\Models\ClienteModel();
+    $clientes = $clienteModel
+        ->where('empresa_id', $empresaId)
+        ->orderBy('nome_razao', 'ASC')
+        ->findAll();
+
+    // 3. Monta o array de dados para a view
+    $data = [
+        'title'    => 'Editar Veículo - ' . $veiculo['placa'],
+        'veiculo'  => $veiculo,
+        'clientes' => $clientes
+    ];
+
+    return view('veiculos/veiculos_form_v', $data);
+}
+
+/**
+ * Método opcional para criar um novo veículo usando a mesma view de formulário
+ */
+public function novo()
+{
+    $empresaId = session()->get('empresa_id');
+    
+    $clienteModel = new \App\Models\ClienteModel();
+    $clientes = $clienteModel
+        ->where('empresa_id', $empresaId)
+        ->orderBy('nome_razao', 'ASC')
+        ->findAll();
+
+    $data = [
+        'title'    => 'Novo Veículo',
+        'clientes' => $clientes
+        // Sem a variável $veiculo, o formulário saberá que é um novo cadastro
+    ];
+
+    return view('veiculos/veiculos_form_v', $data);
+}
+
+
 }

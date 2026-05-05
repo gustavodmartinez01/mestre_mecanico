@@ -113,6 +113,8 @@ $routes->group('', ['filter' => 'auth'], function($routes) {
         $routes->get('relatorio/(:num)', 'OrdemServicoController::relatorio/$1');
         $routes->get('buscar_itens_json/(:any)', 'OrdemServicoController::buscar_itens_json/$1');
         $routes->get('cancelar/(:num)', 'OrdemServicoController::cancelar/$1');
+        $routes->get('detalhes/(:num)', 'OrdemServicoController::detalhes/$1');
+
     });
 
     // Módulo: Cadastro Mestre de Checklists
@@ -227,9 +229,13 @@ $routes->group('veiculos', function($routes) {
     $routes->post('salvar', 'VeiculoController::salvar');
     $routes->get('buscarPorCliente/(:num)', 'VeiculoController::buscarPorCliente/$1');
     $routes->post('salvarRapido', 'VeiculoController::salvarRapido');
+    $routes->get('editar/(:num)', 'VeiculoController::editar/$1');
+    $routes->get('novo', 'VeiculoController::novo');
 });
-
-
+$routes->get('perfil', 'UsuarioController::perfil');
+$routes->post('perfil/atualizar', 'UsuarioController::atualizarPerfil');
+$routes->post('perfil/senha', 'UsuarioController::alterarSenha');
+$routes->post('usuario/alterarSenha', 'UsuarioController::alterarSenha');
 
 }); // FIM DO GRUPO AUTH (Corrigido: adicionado o parêntese final)
 $routes->get('view/requisicao/(:any)', 'ComprasController::visualizar_publico/$1');

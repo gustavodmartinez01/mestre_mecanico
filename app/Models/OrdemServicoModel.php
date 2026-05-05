@@ -23,6 +23,7 @@ class OrdemServicoModel extends Model
         'status', 
         'data_abertura', 
         'data_aprovacao', 
+        'data_previsao',
         'data_fechamento', 
         'km_entrada', 
         'descricao_problema', 
